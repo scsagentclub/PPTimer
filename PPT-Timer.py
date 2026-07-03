@@ -56,8 +56,10 @@ THEMES = {
 
 class PomodoroTimer:
     def __init__(self):
+        self.theme = self.load_theme()
+
         self.root = tk.Tk()
-        self.root.configure(bg='#0d0d0d')
+        self.root.configure(bg=THEMES[self.theme]['bg'])
         self.root.attributes('-topmost', True)
         self.root.overrideredirect(True)   # no title bar
         self.root.resizable(False, False)
@@ -71,7 +73,6 @@ class PomodoroTimer:
         self.after_id = None
         self.ppt_was_active = True   # prevent trigger on first poll
 
-        self.theme = self.load_theme()
         self.logo_path = self.find_logo()
 
         self.W = 190
@@ -171,6 +172,7 @@ class PomodoroTimer:
         self.right.configure(bg=t['bar'])
         self.m_btn.configure(fg=t['btn_fg'], bg=t['btn_bg'])
         self.p_btn.configure(fg=t['btn_fg'], bg=t['btn_bg'])
+        self.time_lbl.configure(fg=t['work_fg'] if self.is_work else t['break_fg'], bg=t['bg'])
         if hasattr(self, 'logo_lbl'):
             self.logo_lbl.configure(bg=t['bar'])
         if self.theme_menu_btn:

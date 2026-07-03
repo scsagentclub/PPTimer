@@ -27,14 +27,22 @@ A lifetime-free PowerPoint countdown timer software.
 
 ## 自行打包 / Build
 
+### Windows 本地打包
+
 ```bash
 pip install -r requirements.txt
-python build.py
+python build.py          # 生成 PPTimer.zip（便携版）
+python setup.py bdist_msi # 生成 MSI 安装包
 ```
 
-打包后会生成 `dist/PPTimer.exe` 和 `PPTimer.zip`。
+### GitHub Actions 自动构建
 
-After building, `dist/PPTimer.exe` and `PPTimer.zip` will be generated.
+推送到 `v*` tag 即可触发自动构建，产物包含 `PPTimer.zip` 和 `PPTimer.msi`：
+
+```bash
+git tag v1.1.0
+git push origin v1.1.0
+```
 
 ## 致谢 / Credits
 

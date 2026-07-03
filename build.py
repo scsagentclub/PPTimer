@@ -7,7 +7,7 @@ import sys
 import zipfile
 from pathlib import Path
 
-APP_NAME = "PPT-Timer"
+APP_NAME = "PPTimer"
 SCRIPT = "PPT-Timer.py"
 ICON = "timer_icon.ico"
 BUILD_DIR = Path("build")

@@ -101,6 +101,9 @@ class PomodoroTimer:
         self.root.bind('<Button-1>', self.start_drag)
         self.root.bind('<B1-Motion>', self.do_drag)
 
+        # Right-click empty area to exit (minimalist, no extra buttons)
+        self.root.bind('<Button-3>', self.exit_menu)
+
         # PPT auto-detect polling — start after 2s delay
         self.root.after(2000, self.poll_ppt)
 
@@ -232,6 +235,7 @@ class PomodoroTimer:
                                        fg=t['btn_fg'], bg=t['btn_bg'], cursor='hand2')
         self.theme_menu_btn.pack(side='right', ipadx=3, padx=(2, 0))
         self.theme_menu_btn.bind('<Button-1>', self.theme_menu)
+        self.theme_menu_btn.bind('<Button-3>', self.exit_menu)
 
         self.fallback_lbl = None
         self.logo_lbl = None
@@ -243,6 +247,7 @@ class PomodoroTimer:
                 self.logo_lbl = tk.Label(self.right, image=self.logo_tk, bg=t['bar'], cursor='hand2')
                 self.logo_lbl.pack(side='right')
                 self.logo_lbl.bind('<Button-1>', lambda e: self.reset())
+                self.logo_lbl.bind('<Button-3>', self.exit_menu)
             except Exception:
                 self._fallback_label(self.right)
         else:
@@ -254,12 +259,22 @@ class PomodoroTimer:
                                      fg=t['btn_fg'], bg=t['bar'], cursor='hand2')
         self.fallback_lbl.pack(side='right', padx=(0, 4))
         self.fallback_lbl.bind('<Button-1>', lambda e: self.reset())
+        self.fallback_lbl.bind('<Button-3>', self.exit_menu)
 
     # ---------- helpers ----------
 
     def fmt(self, secs):
         m, s = divmod(secs, 60)
         return f'{m:02d}:{s:02d}'
+
+    def exit_menu(self, event):
+        t = THEMES[self.theme]
+        menu = tk.Menu(self.root, tearoff=0, bg=t['menu_bg'], fg=t.get('btn_fg', '#ffffff'),
+                       activebackground=t['menu_active_bg'], activeforeground=t.get('btn_fg', '#ffffff'),
+                       font=('Segoe UI', 10))
+        menu.add_command(label='退出 Exit', command=self.root.destroy)
+        menu.post(event.x_root, event.y_root)
+        return 'break'
 
     def update_display(self):
         t = THEMES[self.theme]
@@ -308,7 +323,10 @@ class PomodoroTimer:
         for p in [1, 3, 5, 10, 15, 20, 25, 30, 45, 60]:
             s = p * 60
             menu.add_command(label=f'{p} 分钟', command=lambda secs=s: self.set_preset(secs))
+        menu.add_separator()
+        menu.add_command(label='退出 Exit', command=self.root.destroy)
         menu.post(event.x_root, event.y_root)
+        return 'break'
 
     def set_preset(self, secs):
         self.remaining = secs

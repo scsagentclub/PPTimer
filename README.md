@@ -19,10 +19,13 @@ A lifetime-free PowerPoint countdown timer software.
 5. 点击时间可启动/暂停倒计时。  
    Click the time to start/pause the countdown.
 
-6. 按 `Esc` 退出；在窗口空白处或 logo 上右键可选择「退出 Exit」。  
-   Press `Esc` to exit, or right-click on an empty area or the logo to select "Exit".
+6. 按 `Esc` 退出；在窗口空白处、时间或 logo 上右键可选择「退出 Exit」。  
+   Press `Esc` to exit, or right-click on an empty area, the time, or the logo to select "Exit".
 
-7. 点击 `T` 按钮可切换主题（深色 / 浅色 / 蓝色 / 紫色），主题偏好会自动保存。  
+7. 倒计时结束时窗口会闪烁提醒；是否自动退出 PPT 演示可在右键菜单中开关（默认关闭）。  
+   The window flashes when countdown ends; auto-exit from PPT slideshow can be toggled in the right-click menu (off by default).
+
+8. 点击 `T` 按钮可切换主题（深色 / 浅色 / 蓝色 / 紫色），主题偏好会自动保存。  
    Click the `T` button to switch themes (dark / light / blue / purple); your preference is saved automatically.
 
 ## 自行打包 / Build

@@ -56,7 +56,9 @@ THEMES = {
 
 class PomodoroTimer:
     def __init__(self):
-        self.theme = self.load_theme()
+        self.config = self.load_config()
+        self.theme = self.config.get('theme', 'dark')
+        self.auto_exit_slideshow = self.config.get('auto_exit_slideshow', False)
 
         self.root = tk.Tk()
         self.root.configure(bg=THEMES[self.theme]['bg'])
@@ -145,18 +147,22 @@ class PomodoroTimer:
             folder = os.path.dirname(sys.executable)
         return os.path.join(folder, 'ppt_timer_config.json')
 
-    def load_theme(self):
+    def load_config(self):
         try:
             with open(self.config_path(), 'r', encoding='utf-8') as f:
-                name = json.load(f).get('theme', 'dark')
-                return name if name in THEMES else 'dark'
+                cfg = json.load(f)
+                cfg['theme'] = cfg.get('theme', 'dark')
+                cfg['auto_exit_slideshow'] = cfg.get('auto_exit_slideshow', False)
+                if cfg['theme'] not in THEMES:
+                    cfg['theme'] = 'dark'
+                return cfg
         except Exception:
-            return 'dark'
+            return {'theme': 'dark', 'auto_exit_slideshow': False}
 
-    def save_theme(self):
+    def save_config(self):
         try:
             with open(self.config_path(), 'w', encoding='utf-8') as f:
-                json.dump({'theme': self.theme}, f)
+                json.dump({'theme': self.theme, 'auto_exit_slideshow': self.auto_exit_slideshow}, f)
         except Exception:
             pass
 
@@ -167,7 +173,7 @@ class PomodoroTimer:
         if name not in THEMES:
             return
         self.theme = name
-        self.save_theme()
+        self.save_config()
         t = THEMES[name]
         self.root.configure(bg=t['bg'])
         self.bar.configure(bg=t['bar'])
@@ -193,7 +199,12 @@ class PomodoroTimer:
         for name, label in labels.items():
             marker = '● ' if name == self.theme else '   '
             menu.add_command(label=marker + label, command=lambda n=name: self.apply_theme(n))
+        menu.add_separator()
+        exit_marker = '开' if self.auto_exit_slideshow else '关'
+        menu.add_command(label=f'倒计时结束退出PPT: {exit_marker}',
+                         command=self.toggle_auto_exit_slideshow)
         menu.post(event.x_root, event.y_root)
+        return 'break'
 
     # ---------- UI ----------
 
@@ -272,9 +283,17 @@ class PomodoroTimer:
         menu = tk.Menu(self.root, tearoff=0, bg=t['menu_bg'], fg=t.get('btn_fg', '#ffffff'),
                        activebackground=t['menu_active_bg'], activeforeground=t.get('btn_fg', '#ffffff'),
                        font=('Segoe UI', 10))
+        exit_marker = '开' if self.auto_exit_slideshow else '关'
+        menu.add_command(label=f'倒计时结束退出PPT: {exit_marker}',
+                         command=self.toggle_auto_exit_slideshow)
+        menu.add_separator()
         menu.add_command(label='退出 Exit', command=self.root.destroy)
         menu.post(event.x_root, event.y_root)
         return 'break'
+
+    def toggle_auto_exit_slideshow(self):
+        self.auto_exit_slideshow = not self.auto_exit_slideshow
+        self.save_config()
 
     def update_display(self):
         t = THEMES[self.theme]
@@ -324,6 +343,9 @@ class PomodoroTimer:
             s = p * 60
             menu.add_command(label=f'{p} 分钟', command=lambda secs=s: self.set_preset(secs))
         menu.add_separator()
+        exit_marker = '开' if self.auto_exit_slideshow else '关'
+        menu.add_command(label=f'倒计时结束退出PPT: {exit_marker}',
+                         command=self.toggle_auto_exit_slideshow)
         menu.add_command(label='退出 Exit', command=self.root.destroy)
         menu.post(event.x_root, event.y_root)
         return 'break'
@@ -362,17 +384,21 @@ class PomodoroTimer:
         if self.remaining <= 0:
             self.running = False
             self.flash()
-            self.exit_slideshow()
+            if self.auto_exit_slideshow:
+                self.exit_slideshow()
             self.switch_mode()
             return
         self.remaining -= 1
         self.update_display()
         self.after_id = self.root.after(1000, self.tick)
 
-    def flash(self):
+    def flash(self, count=0):
         t = THEMES[self.theme]
-        self.root.configure(bg=t['flash'])
-        self.root.after(300, lambda: self.root.configure(bg=t['bg']))
+        if count >= 6:
+            self.root.configure(bg=t['bg'])
+            return
+        self.root.configure(bg=t['flash'] if count % 2 == 0 else t['bg'])
+        self.root.after(300, lambda: self.flash(count + 1))
 
     def reset(self):
         self.running = False

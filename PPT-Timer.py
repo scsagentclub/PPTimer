@@ -77,8 +77,8 @@ class PomodoroTimer:
 
         self.logo_path = self.find_logo()
 
-        self.W = 190
-        self.H = 44
+        self.W = 170
+        self.H = 40
 
         self.build_ui()
         self.update_display()
@@ -187,7 +187,7 @@ class PomodoroTimer:
         if self.theme_menu_btn:
             self.theme_menu_btn.configure(fg=t['btn_fg'], bg=t['btn_bg'])
         if self.fallback_lbl and self.fallback_lbl.winfo_exists():
-            self.fallback_lbl.configure(fg=t['btn_fg'], bg=t['bar'])
+            self.fallback_lbl.configure(fg=t['btn_fg'], bg=t['btn_bg'])
         self.update_display()
 
     def theme_menu(self, event):
@@ -211,7 +211,7 @@ class PomodoroTimer:
     def build_ui(self):
         t = THEMES[self.theme]
         self.bar = tk.Frame(self.root, bg=t['bar'], height=self.H)
-        self.bar.pack(fill='both', expand=True, padx=4, pady=3)
+        self.bar.pack(fill='both', expand=True, padx=2, pady=2)
         self.bar.pack_propagate(False)
 
         # -- Left: [-] time [+] --
@@ -244,7 +244,7 @@ class PomodoroTimer:
 
         self.theme_menu_btn = tk.Label(self.right, text='T', font=('Segoe UI', 8, 'bold'),
                                        fg=t['btn_fg'], bg=t['btn_bg'], cursor='hand2')
-        self.theme_menu_btn.pack(side='right', ipadx=3, padx=(2, 0))
+        self.theme_menu_btn.pack(side='right', ipadx=2, padx=(1, 0))
         self.theme_menu_btn.bind('<Button-1>', self.theme_menu)
         self.theme_menu_btn.bind('<Button-3>', self.exit_menu)
 
@@ -266,9 +266,9 @@ class PomodoroTimer:
 
     def _fallback_label(self, parent):
         t = THEMES[self.theme]
-        self.fallback_lbl = tk.Label(parent, text='Reset', font=('Segoe UI', 9, 'bold'),
-                                     fg=t['btn_fg'], bg=t['bar'], cursor='hand2')
-        self.fallback_lbl.pack(side='right', padx=(0, 4))
+        self.fallback_lbl = tk.Label(parent, text='R', font=('Segoe UI', 8, 'bold'),
+                                     fg=t['btn_fg'], bg=t['btn_bg'], cursor='hand2')
+        self.fallback_lbl.pack(side='right', ipadx=2, padx=(1, 0))
         self.fallback_lbl.bind('<Button-1>', lambda e: self.reset())
         self.fallback_lbl.bind('<Button-3>', self.exit_menu)
 

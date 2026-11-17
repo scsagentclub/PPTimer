@@ -6,6 +6,13 @@
 
 一款永久免费使用的 PowerPoint 倒计时软件。
 
+### 下载与安装
+
+在 [GitHub Releases](https://github.com/scsagentclub/PPTimer/releases) 下载构建产物：
+
+- `PPTimer.zip`：免安装版，解压后运行 `PPTimer.exe`。
+- `PPTimer-1.2.0-win64.msi`：Windows 64 位安装版，安装到当前用户目录并创建开始菜单快捷方式，可在 Windows 设置中卸载。
+
 ### 使用说明
 
 1. 软件不用安装，放置桌面点击即可运行。默认工作倒计时为 7 分钟，休息倒计时为 5 分钟。
@@ -28,14 +35,27 @@ python build.py
 
 打包后会生成 `dist/PPTimer.exe` 和 `PPTimer.zip`。
 
+生成 MSI 需要在 Windows 上安装 .NET 8 SDK，并在 PowerShell 中执行：
+
+```powershell
+dotnet tool install --global wix --version 5.0.2
+./installer/build-msi.ps1
+```
+
+安装包版本读取自 `VERSION`，产物为 `dist/PPTimer-1.2.0-win64.msi`。
+
 ### GitHub Actions 自动构建
 
-推送到 `v*` tag 即可触发自动构建，产物为 `PPTimer.zip`：
+推送与 `VERSION` 一致的 `v*` tag 即可触发自动构建。例如 `VERSION` 为 `1.2.0` 时：
 
 ```bash
 git tag v1.2.0
 git push origin v1.2.0
 ```
+
+工作流会生成 ZIP 和 MSI，验证 MSI 安装及卸载后，将两种产物上传到对应版本的 GitHub Release。也可在 Actions 页面手动运行工作流，下载构建产物。
+
+给已有的 v1.2.0 补建 MSI：在 Actions 中选择 **Build Windows ZIP and MSI**，点击 **Run workflow**，选择 `main` 分支并填写 `release_tag` 为 `v1.2.0`。工作流会下载已有 Release 的 ZIP，用其中的 EXE 生成 MSI，并将安装包添加到该 Release。
 
 ### 致谢
 
@@ -44,6 +64,13 @@ git push origin v1.2.0
 ## English
 
 A free-for-life PowerPoint countdown timer.
+
+### Download and install
+
+Download build outputs from [GitHub Releases](https://github.com/scsagentclub/PPTimer/releases):
+
+- `PPTimer.zip`: portable edition. Extract the ZIP and run `PPTimer.exe`.
+- `PPTimer-1.2.0-win64.msi`: Windows 64-bit installer. Installs for the current user, creates a Start menu shortcut, and supports uninstalling from Windows Settings.
 
 ### Usage
 
@@ -67,14 +94,27 @@ python build.py
 
 After building, `dist/PPTimer.exe` and `PPTimer.zip` will be generated.
 
+To create the MSI, install the .NET 8 SDK on Windows and run these commands in PowerShell:
+
+```powershell
+dotnet tool install --global wix --version 5.0.2
+./installer/build-msi.ps1
+```
+
+The installer version is read from `VERSION`. The output is `dist/PPTimer-1.2.0-win64.msi`.
+
 ### GitHub Actions automated builds
 
-Push a `v*` tag to trigger an automated build that produces `PPTimer.zip`:
+Push a `v*` tag matching `VERSION` to trigger an automated build. For example, when `VERSION` is `1.2.0`:
 
 ```bash
 git tag v1.2.0
 git push origin v1.2.0
 ```
+
+The workflow builds the ZIP and MSI, verifies MSI installation and uninstallation, and uploads both outputs to the corresponding GitHub Release. You can also run the workflow manually from the Actions page and download its build artifacts.
+
+To add an MSI to the existing v1.2.0 release, select **Build Windows ZIP and MSI** in Actions, click **Run workflow**, select the `main` branch, and set `release_tag` to `v1.2.0`. The workflow downloads the existing release ZIP, packages its EXE as an MSI, and attaches the installer to that release.
 
 ### Credits
 

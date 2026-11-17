@@ -1,10 +1,15 @@
-name: Build EXE zip
+name: Build Windows ZIP and MSI
 
 on:
   push:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Existing release to add an MSI to (for example v1.2.0); leave empty for a build only'
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -20,25 +25,111 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          architecture: 'x64'
+
+      - name: Validate release version
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          $version = (Get-Content VERSION -Raw).Trim()
+          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne "v$version") {
+            throw "Tag $env:GITHUB_REF_NAME does not match VERSION ($version)."
+          }
+          if ($env:RELEASE_TAG -and $env:RELEASE_TAG -ne "v$version") {
+            throw "Release $env:RELEASE_TAG does not match VERSION ($version)."
+          }
+
+      - name: Set up .NET for WiX
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Install WiX Toolset
+        run: dotnet tool install --global wix --version 5.0.2
 
       - name: Install dependencies
+        if: inputs.release_tag == ''
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
       - name: Build portable EXE (zip)
+        if: inputs.release_tag == ''
         run: python build.py
+
+      - name: Download EXE from the existing release
+        if: inputs.release_tag != ''
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          gh release download "$env:RELEASE_TAG" --repo "$env:GITHUB_REPOSITORY" --pattern PPTimer.zip
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to download the existing release ZIP.' }
+          Expand-Archive PPTimer.zip -DestinationPath dist
+          if (-not (Test-Path dist/PPTimer.exe)) { throw 'Release ZIP does not contain PPTimer.exe.' }
+
+      - name: Build MSI installer
+        shell: pwsh
+        run: ./installer/build-msi.ps1
+
+      - name: Verify MSI install and uninstall
+        shell: pwsh
+        run: |
+          $msi = (Get-ChildItem dist/PPTimer-*-win64.msi).FullName
+          $install = Start-Process msiexec.exe -ArgumentList "/i `"$msi`" /qn /norestart /L*v install.log" -Wait -PassThru
+          if ($install.ExitCode -notin @(0, 3010)) { throw "MSI install failed: $($install.ExitCode)" }
+          $installedExe = Join-Path $env:LOCALAPPDATA 'PPTimer/PPTimer.exe'
+          $shortcut = Join-Path ([Environment]::GetFolderPath('Programs')) 'PPTimer/PPTimer.lnk'
+          if (-not (Test-Path $installedExe)) { throw 'Installed executable is missing.' }
+          if ((Get-FileHash $installedExe).Hash -ne (Get-FileHash dist/PPTimer.exe).Hash) {
+            throw 'Installed executable does not match the build.'
+          }
+          if (-not (Test-Path $shortcut)) { throw 'Start menu shortcut is missing.' }
+          $uninstall = Start-Process msiexec.exe -ArgumentList "/x `"$msi`" /qn /norestart /L*v uninstall.log" -Wait -PassThru
+          if ($uninstall.ExitCode -notin @(0, 3010)) { throw "MSI uninstall failed: $($uninstall.ExitCode)" }
+          if ((Test-Path $installedExe) -or (Test-Path $shortcut)) {
+            throw 'Uninstall left the executable or shortcut behind.'
+          }
+
+      - name: Upload installer logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PPTimer-installer-logs
+          path: |
+            install.log
+            uninstall.log
+          if-no-files-found: ignore
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: PPTimer-zip
-          path: PPTimer.zip
+          name: PPTimer-windows
+          path: |
+            PPTimer.zip
+            dist/PPTimer-*-win64.msi
+          if-no-files-found: error
 
       - name: Create Release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') && inputs.release_tag == ''
         uses: softprops/action-gh-release@v2
         with:
-          files: PPTimer.zip
+          files: |
+            PPTimer.zip
+            dist/PPTimer-*-win64.msi
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Add MSI to the existing release
+        if: github.event_name == 'workflow_dispatch' && inputs.release_tag != ''
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.release_tag }}
+          files: dist/PPTimer-*-win64.msi
+          fail_on_unmatched_files: true
+          overwrite_files: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -4,7 +4,10 @@ import os
 import sys
 import json
 import ctypes
+import math
+import time
 from ctypes import wintypes
+from tkinter import messagebox, simpledialog
 
 user32 = ctypes.windll.user32
 
@@ -50,6 +53,16 @@ THEMES = {
         'bg': '#1a0b2e', 'bar': '#1a0b2e', 'btn_bg': '#2d1b4e',
         'btn_fg': '#a78bfa', 'work_fg': '#f472b6', 'break_fg': '#34d399',
         'flash': '#f472b6', 'menu_bg': '#2d1b4e', 'menu_active_bg': '#4c1d95'
+    },
+    'orange': {
+        'bg': '#fff5e6', 'bar': '#fff5e6', 'btn_bg': '#ffcc80',
+        'btn_fg': '#663300', 'work_fg': '#c62828', 'break_fg': '#2e7d32',
+        'flash': '#c62828', 'menu_bg': '#fff5e6', 'menu_active_bg': '#ffcc80'
+    },
+    'mint': {
+        'bg': '#e8f5e9', 'bar': '#e8f5e9', 'btn_bg': '#a5d6a7',
+        'btn_fg': '#1b5e20', 'work_fg': '#d32f2f', 'break_fg': '#2e7d32',
+        'flash': '#d32f2f', 'menu_bg': '#e8f5e9', 'menu_active_bg': '#a5d6a7'
     }
 }
 
@@ -57,7 +70,7 @@ THEMES = {
 class PomodoroTimer:
     def __init__(self):
         self.config = self.load_config()
-        self.theme = self.config.get('theme', 'dark')
+        self.theme = self.config.get('theme', 'blue')
         self.auto_exit_slideshow = self.config.get('auto_exit_slideshow', False)
 
         self.root = tk.Tk()
@@ -66,13 +79,16 @@ class PomodoroTimer:
         self.root.overrideredirect(True)   # no title bar
         self.root.resizable(False, False)
 
-        # Default 10 minutes
-        self.work_secs = 10 * 60
+        # Default 7 minutes
+        self.work_secs = 7 * 60
         self.break_secs = 5 * 60
         self.remaining = self.work_secs
         self.is_work = True
         self.running = False
         self.after_id = None
+        self.deadline = None
+        self.flash_id = None
+        self.editing_time = False
         self.ppt_was_active = True   # prevent trigger on first poll
 
         self.logo_path = self.find_logo()
@@ -91,6 +107,11 @@ class PomodoroTimer:
         # Keyboard
         self.root.bind('<Escape>', lambda e: self.root.destroy())
         self.root.bind('<space>', lambda e: self.toggle())
+        self.root.bind('<r>', lambda e: self.reset())
+        self.root.bind('<s>', lambda e: self.set_time())
+        self.root.bind('<plus>', lambda e: self.adjust(60))
+        self.root.bind('<equal>', lambda e: self.adjust(60))
+        self.root.bind('<minus>', lambda e: self.adjust(-60))
 
         # Mouse
         self.root.bind('<MouseWheel>', self.on_scroll)
@@ -131,12 +152,12 @@ class PomodoroTimer:
     # ---------- window drag ----------
 
     def start_drag(self, event):
-        self._dx = event.x
-        self._dy = event.y
+        self._dx = event.x_root - self.root.winfo_rootx()
+        self._dy = event.y_root - self.root.winfo_rooty()
 
     def do_drag(self, event):
-        x = self.root.winfo_x() + event.x - self._dx
-        y = self.root.winfo_y() + event.y - self._dy
+        x = event.x_root - self._dx
+        y = event.y_root - self._dy
         self.root.geometry(f'+{x}+{y}')
 
     # ---------- theme ----------
@@ -151,13 +172,13 @@ class PomodoroTimer:
         try:
             with open(self.config_path(), 'r', encoding='utf-8') as f:
                 cfg = json.load(f)
-                cfg['theme'] = cfg.get('theme', 'dark')
+                cfg['theme'] = cfg.get('theme', 'blue')
                 cfg['auto_exit_slideshow'] = cfg.get('auto_exit_slideshow', False)
                 if cfg['theme'] not in THEMES:
-                    cfg['theme'] = 'dark'
+                    cfg['theme'] = 'blue'
                 return cfg
         except Exception:
-            return {'theme': 'dark', 'auto_exit_slideshow': False}
+            return {'theme': 'blue', 'auto_exit_slideshow': False}
 
     def save_config(self):
         try:
@@ -167,11 +188,12 @@ class PomodoroTimer:
             pass
 
     def theme_color(self, key):
-        return THEMES[self.theme].get(key, THEMES['dark'][key])
+        return THEMES[self.theme].get(key, THEMES['blue'][key])
 
     def apply_theme(self, name):
         if name not in THEMES:
             return
+        self.stop_flash()
         self.theme = name
         self.save_config()
         t = THEMES[name]
@@ -195,11 +217,14 @@ class PomodoroTimer:
         menu = tk.Menu(self.root, tearoff=0, bg=t['menu_bg'], fg=t.get('btn_fg', '#ffffff'),
                        activebackground=t['menu_active_bg'], activeforeground=t.get('btn_fg', '#ffffff'),
                        font=('Segoe UI', 10))
-        labels = {'dark': '深色', 'light': '浅色', 'blue': '蓝色', 'purple': '紫色'}
+        labels = {'dark': '深色', 'light': '浅色', 'blue': '蓝色',
+                  'purple': '紫色', 'orange': '暖橙', 'mint': '薄荷'}
         for name, label in labels.items():
             marker = '● ' if name == self.theme else '   '
             menu.add_command(label=marker + label, command=lambda n=name: self.apply_theme(n))
         menu.add_separator()
+        menu.add_command(label='设定时间  S', command=self.set_time)
+        menu.add_command(label='置顶/取消置顶', command=self.toggle_topmost)
         exit_marker = '开' if self.auto_exit_slideshow else '关'
         menu.add_command(label=f'倒计时结束退出PPT: {exit_marker}',
                          command=self.toggle_auto_exit_slideshow)
@@ -286,6 +311,8 @@ class PomodoroTimer:
         exit_marker = '开' if self.auto_exit_slideshow else '关'
         menu.add_command(label=f'倒计时结束退出PPT: {exit_marker}',
                          command=self.toggle_auto_exit_slideshow)
+        menu.add_command(label='设定时间  S', command=self.set_time)
+        menu.add_command(label='置顶/取消置顶', command=self.toggle_topmost)
         menu.add_separator()
         menu.add_command(label='退出 Exit', command=self.root.destroy)
         menu.post(event.x_root, event.y_root)
@@ -294,6 +321,9 @@ class PomodoroTimer:
     def toggle_auto_exit_slideshow(self):
         self.auto_exit_slideshow = not self.auto_exit_slideshow
         self.save_config()
+
+    def toggle_topmost(self):
+        self.root.attributes('-topmost', not self.root.attributes('-topmost'))
 
     def update_display(self):
         t = THEMES[self.theme]
@@ -304,7 +334,7 @@ class PomodoroTimer:
 
     def poll_ppt(self):
         is_active = any_fullscreen_excluding_self()
-        if is_active and not self.ppt_was_active and not self.running:
+        if is_active and not self.ppt_was_active and not self.running and not self.editing_time:
             self.start()
         self.ppt_was_active = is_active
         self.root.after(1000, self.poll_ppt)
@@ -327,7 +357,7 @@ class PomodoroTimer:
         self.update_display()
 
     def on_scroll(self, event):
-        if self.running:
+        if self.running or event.delta == 0:
             return
         delta = 60 if event.delta > 0 else -60
         self.adjust(delta)
@@ -343,6 +373,8 @@ class PomodoroTimer:
             s = p * 60
             menu.add_command(label=f'{p} 分钟', command=lambda secs=s: self.set_preset(secs))
         menu.add_separator()
+        menu.add_command(label='自定义时间  S', command=self.set_time)
+        menu.add_command(label='置顶/取消置顶', command=self.toggle_topmost)
         exit_marker = '开' if self.auto_exit_slideshow else '关'
         menu.add_command(label=f'倒计时结束退出PPT: {exit_marker}',
                          command=self.toggle_auto_exit_slideshow)
@@ -358,17 +390,78 @@ class PomodoroTimer:
             self.break_secs = secs
         self.update_display()
 
+    @staticmethod
+    def parse_time(value):
+        value = value.strip()
+        if ':' in value:
+            parts = value.split(':')
+            if len(parts) != 2:
+                raise ValueError('请使用 分:秒 格式')
+            minutes, seconds = map(int, parts)
+            if minutes < 0 or not 0 <= seconds < 60:
+                raise ValueError('秒数必须在 0 到 59 之间')
+            total = minutes * 60 + seconds
+        else:
+            minutes = float(value)
+            if not math.isfinite(minutes):
+                raise ValueError('请输入有限的分钟数')
+            total = round(minutes * 60)
+        if not 1 <= total <= 99 * 60 + 59:
+            raise ValueError('时间必须在 1 秒到 99 分 59 秒之间')
+        return total
+
+    def set_time(self):
+        was_running = self.running
+        if was_running:
+            self.pause()
+        self.editing_time = True
+        try:
+            value = simpledialog.askstring('设定时间', '请输入分钟或 分:秒（例如 10 或 10:30）：',
+                                           initialvalue=self.fmt(self.remaining), parent=self.root)
+            if value is not None:
+                try:
+                    seconds = self.parse_time(value)
+                except (ValueError, OverflowError) as error:
+                    messagebox.showerror('输入错误', str(error), parent=self.root)
+                else:
+                    self.remaining = seconds
+                    if self.is_work:
+                        self.work_secs = seconds
+                    else:
+                        self.break_secs = seconds
+                    self.stop_flash()
+                    self.update_display()
+        finally:
+            self.editing_time = False
+            if was_running:
+                self.start()
+
     # ---------- timer ----------
 
     def start(self):
+        if self.running or self.editing_time:
+            return
+        if self.remaining <= 0:
+            self.remaining = self.work_secs if self.is_work else self.break_secs
+        self.stop_flash()
+        self.deadline = time.monotonic() + self.remaining
         self.running = True
         self.tick()
 
+    def pause(self):
+        if not self.running:
+            return
+        self.remaining = max(0, math.ceil(self.deadline - time.monotonic()))
+        self.running = False
+        self.deadline = None
+        if self.after_id is not None:
+            self.root.after_cancel(self.after_id)
+            self.after_id = None
+        self.update_display()
+
     def toggle(self):
         if self.running:
-            self.running = False
-            if self.after_id:
-                self.root.after_cancel(self.after_id)
+            self.pause()
         else:
             self.start()
 
@@ -381,37 +474,55 @@ class PomodoroTimer:
     def tick(self):
         if not self.running:
             return
-        if self.remaining <= 0:
+        self.after_id = None
+        remaining = self.deadline - time.monotonic()
+        if remaining <= 0:
+            self.remaining = 0
             self.running = False
+            self.deadline = None
+            self.update_display()
             self.flash()
-            if self.auto_exit_slideshow:
+            if self.auto_exit_slideshow and any_fullscreen_excluding_self():
                 self.exit_slideshow()
             self.switch_mode()
             return
-        self.remaining -= 1
+        self.remaining = math.ceil(remaining)
         self.update_display()
-        self.after_id = self.root.after(1000, self.tick)
+        until_next_second = remaining - (self.remaining - 1)
+        self.after_id = self.root.after(max(1, math.ceil(until_next_second * 1000)), self.tick)
 
     def flash(self, count=0):
         t = THEMES[self.theme]
         if count >= 6:
             self.root.configure(bg=t['bg'])
+            self.flash_id = None
             return
         self.root.configure(bg=t['flash'] if count % 2 == 0 else t['bg'])
-        self.root.after(300, lambda: self.flash(count + 1))
+        self.flash_id = self.root.after(300, lambda: self.flash(count + 1))
+
+    def stop_flash(self):
+        if self.flash_id is not None:
+            self.root.after_cancel(self.flash_id)
+            self.flash_id = None
+        self.root.configure(bg=THEMES[self.theme]['bg'])
 
     def reset(self):
         self.running = False
-        if self.after_id:
+        self.deadline = None
+        if self.after_id is not None:
             self.root.after_cancel(self.after_id)
+            self.after_id = None
+        self.stop_flash()
         secs = self.work_secs if self.is_work else self.break_secs
-        self.remaining = (secs // 60) * 60  # ensure whole minute
+        self.remaining = secs
         self.update_display()
 
     def switch_mode(self):
         self.running = False
-        if self.after_id:
+        self.deadline = None
+        if self.after_id is not None:
             self.root.after_cancel(self.after_id)
+            self.after_id = None
         self.is_work = not self.is_work
         self.remaining = self.work_secs if self.is_work else self.break_secs
         self.update_display()

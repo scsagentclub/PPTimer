@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Existing release to add an MSI to (for example v1.2.0); leave empty for a build only'
+        description: 'Existing release to add an MSI to (for example v1.2.1); leave empty for a build only'
         required: false
         type: string
 

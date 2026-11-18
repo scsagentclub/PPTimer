@@ -36,42 +36,42 @@ def any_fullscreen_excluding_self():
 THEMES = {
     'dark': {
         'bg': '#0d0d0d', 'bar': '#0d0d0d', 'btn_bg': '#1a1a2e',
-        'btn_fg': '#888888', 'work_fg': '#e63946', 'break_fg': '#2ecc71',
+        'btn_fg': '#888888', 'timer_fg': '#e63946',
         'flash': '#e63946', 'menu_bg': '#1a1a2e', 'menu_active_bg': '#16213e'
     },
     'light': {
         'bg': '#f5f5f5', 'bar': '#f5f5f5', 'btn_bg': '#e0e0e0',
-        'btn_fg': '#555555', 'work_fg': '#d32f2f', 'break_fg': '#388e3c',
+        'btn_fg': '#555555', 'timer_fg': '#d32f2f',
         'flash': '#d32f2f', 'menu_bg': '#ffffff', 'menu_active_bg': '#eeeeee'
     },
     'blue': {
         'bg': '#0a192f', 'bar': '#0a192f', 'btn_bg': '#112240',
-        'btn_fg': '#8892b0', 'work_fg': '#ff6b6b', 'break_fg': '#64ffda',
+        'btn_fg': '#8892b0', 'timer_fg': '#ff6b6b',
         'flash': '#ff6b6b', 'menu_bg': '#112240', 'menu_active_bg': '#233554'
     },
     'purple': {
         'bg': '#1a0b2e', 'bar': '#1a0b2e', 'btn_bg': '#2d1b4e',
-        'btn_fg': '#a78bfa', 'work_fg': '#f472b6', 'break_fg': '#34d399',
+        'btn_fg': '#a78bfa', 'timer_fg': '#f472b6',
         'flash': '#f472b6', 'menu_bg': '#2d1b4e', 'menu_active_bg': '#4c1d95'
     },
     'orange': {
         'bg': '#fff5e6', 'bar': '#fff5e6', 'btn_bg': '#ffcc80',
-        'btn_fg': '#663300', 'work_fg': '#c62828', 'break_fg': '#2e7d32',
+        'btn_fg': '#663300', 'timer_fg': '#c62828',
         'flash': '#c62828', 'menu_bg': '#fff5e6', 'menu_active_bg': '#ffcc80'
     },
     'mint': {
         'bg': '#e8f5e9', 'bar': '#e8f5e9', 'btn_bg': '#a5d6a7',
-        'btn_fg': '#1b5e20', 'work_fg': '#d32f2f', 'break_fg': '#2e7d32',
+        'btn_fg': '#1b5e20', 'timer_fg': '#d32f2f',
         'flash': '#d32f2f', 'menu_bg': '#e8f5e9', 'menu_active_bg': '#a5d6a7'
     }
 }
 
 
-class PomodoroTimer:
+class CountdownTimer:
     def __init__(self):
         self.config = self.load_config()
         self.theme = self.config.get('theme', 'blue')
-        self.auto_exit_slideshow = self.config.get('auto_exit_slideshow', False)
+        self.auto_exit_slideshow = self.config.get('auto_exit_slideshow', True)
 
         self.root = tk.Tk()
         self.root.configure(bg=THEMES[self.theme]['bg'])
@@ -80,10 +80,8 @@ class PomodoroTimer:
         self.root.resizable(False, False)
 
         # Default 7 minutes
-        self.work_secs = 7 * 60
-        self.break_secs = 5 * 60
-        self.remaining = self.work_secs
-        self.is_work = True
+        self.duration_secs = 7 * 60
+        self.remaining = self.duration_secs
         self.running = False
         self.after_id = None
         self.deadline = None
@@ -173,12 +171,12 @@ class PomodoroTimer:
             with open(self.config_path(), 'r', encoding='utf-8') as f:
                 cfg = json.load(f)
                 cfg['theme'] = cfg.get('theme', 'blue')
-                cfg['auto_exit_slideshow'] = cfg.get('auto_exit_slideshow', False)
+                cfg['auto_exit_slideshow'] = cfg.get('auto_exit_slideshow', True)
                 if cfg['theme'] not in THEMES:
                     cfg['theme'] = 'blue'
                 return cfg
         except Exception:
-            return {'theme': 'blue', 'auto_exit_slideshow': False}
+            return {'theme': 'blue', 'auto_exit_slideshow': True}
 
     def save_config(self):
         try:
@@ -203,8 +201,8 @@ class PomodoroTimer:
         self.right.configure(bg=t['bar'])
         self.m_btn.configure(fg=t['btn_fg'], bg=t['btn_bg'])
         self.p_btn.configure(fg=t['btn_fg'], bg=t['btn_bg'])
-        self.time_lbl.configure(fg=t['work_fg'] if self.is_work else t['break_fg'], bg=t['bg'])
-        if hasattr(self, 'logo_lbl'):
+        self.time_lbl.configure(fg=t['timer_fg'], bg=t['bg'])
+        if self.logo_lbl is not None:
             self.logo_lbl.configure(bg=t['bar'])
         if self.theme_menu_btn:
             self.theme_menu_btn.configure(fg=t['btn_fg'], bg=t['btn_bg'])
@@ -226,7 +224,7 @@ class PomodoroTimer:
         menu.add_command(label='设定时间  S', command=self.set_time)
         menu.add_command(label='置顶/取消置顶', command=self.toggle_topmost)
         exit_marker = '开' if self.auto_exit_slideshow else '关'
-        menu.add_command(label=f'倒计时结束退出PPT: {exit_marker}',
+        menu.add_command(label=f'倒计时结束退出全屏: {exit_marker}',
                          command=self.toggle_auto_exit_slideshow)
         menu.post(event.x_root, event.y_root)
         return 'break'
@@ -252,7 +250,7 @@ class PomodoroTimer:
 
         # Time (click to start/pause)
         self.time_lbl = tk.Label(self.left, text='', font=('Segoe UI', 18, 'bold'),
-                                 fg=t['work_fg'], bg=t['bg'], cursor='hand2')
+                                 fg=t['timer_fg'], bg=t['bg'], cursor='hand2')
         self.time_lbl.pack(side='left', padx=3)
         self.time_lbl.bind('<Button-1>', lambda e: self.toggle())
 
@@ -309,7 +307,7 @@ class PomodoroTimer:
                        activebackground=t['menu_active_bg'], activeforeground=t.get('btn_fg', '#ffffff'),
                        font=('Segoe UI', 10))
         exit_marker = '开' if self.auto_exit_slideshow else '关'
-        menu.add_command(label=f'倒计时结束退出PPT: {exit_marker}',
+        menu.add_command(label=f'倒计时结束退出全屏: {exit_marker}',
                          command=self.toggle_auto_exit_slideshow)
         menu.add_command(label='设定时间  S', command=self.set_time)
         menu.add_command(label='置顶/取消置顶', command=self.toggle_topmost)
@@ -328,7 +326,7 @@ class PomodoroTimer:
     def update_display(self):
         t = THEMES[self.theme]
         self.time_lbl.config(text=self.fmt(self.remaining))
-        self.time_lbl.config(fg=t['work_fg'] if self.is_work else t['break_fg'])
+        self.time_lbl.config(fg=t['timer_fg'])
 
     # ---------- PPT auto-detect ----------
 
@@ -350,10 +348,7 @@ class PomodoroTimer:
         if new > 99 * 60:
             new = 99 * 60
         self.remaining = new
-        if self.is_work:
-            self.work_secs = self.remaining
-        else:
-            self.break_secs = self.remaining
+        self.duration_secs = self.remaining
         self.update_display()
 
     def on_scroll(self, event):
@@ -376,7 +371,7 @@ class PomodoroTimer:
         menu.add_command(label='自定义时间  S', command=self.set_time)
         menu.add_command(label='置顶/取消置顶', command=self.toggle_topmost)
         exit_marker = '开' if self.auto_exit_slideshow else '关'
-        menu.add_command(label=f'倒计时结束退出PPT: {exit_marker}',
+        menu.add_command(label=f'倒计时结束退出全屏: {exit_marker}',
                          command=self.toggle_auto_exit_slideshow)
         menu.add_command(label='退出 Exit', command=self.root.destroy)
         menu.post(event.x_root, event.y_root)
@@ -384,10 +379,7 @@ class PomodoroTimer:
 
     def set_preset(self, secs):
         self.remaining = secs
-        if self.is_work:
-            self.work_secs = secs
-        else:
-            self.break_secs = secs
+        self.duration_secs = secs
         self.update_display()
 
     @staticmethod
@@ -425,10 +417,7 @@ class PomodoroTimer:
                     messagebox.showerror('输入错误', str(error), parent=self.root)
                 else:
                     self.remaining = seconds
-                    if self.is_work:
-                        self.work_secs = seconds
-                    else:
-                        self.break_secs = seconds
+                    self.duration_secs = seconds
                     self.stop_flash()
                     self.update_display()
         finally:
@@ -442,7 +431,7 @@ class PomodoroTimer:
         if self.running or self.editing_time:
             return
         if self.remaining <= 0:
-            self.remaining = self.work_secs if self.is_work else self.break_secs
+            self.remaining = self.duration_secs
         self.stop_flash()
         self.deadline = time.monotonic() + self.remaining
         self.running = True
@@ -482,9 +471,11 @@ class PomodoroTimer:
             self.deadline = None
             self.update_display()
             self.flash()
-            if self.auto_exit_slideshow and any_fullscreen_excluding_self():
+            fullscreen_active = any_fullscreen_excluding_self()
+            # Do not restart for the same fullscreen session if Escape is ignored.
+            self.ppt_was_active = fullscreen_active
+            if self.auto_exit_slideshow and fullscreen_active:
                 self.exit_slideshow()
-            self.switch_mode()
             return
         self.remaining = math.ceil(remaining)
         self.update_display()
@@ -513,18 +504,7 @@ class PomodoroTimer:
             self.root.after_cancel(self.after_id)
             self.after_id = None
         self.stop_flash()
-        secs = self.work_secs if self.is_work else self.break_secs
-        self.remaining = secs
-        self.update_display()
-
-    def switch_mode(self):
-        self.running = False
-        self.deadline = None
-        if self.after_id is not None:
-            self.root.after_cancel(self.after_id)
-            self.after_id = None
-        self.is_work = not self.is_work
-        self.remaining = self.work_secs if self.is_work else self.break_secs
+        self.remaining = self.duration_secs
         self.update_display()
 
     def run(self):
@@ -532,4 +512,4 @@ class PomodoroTimer:
 
 
 if __name__ == '__main__':
-    PomodoroTimer().run()
+    CountdownTimer().run()

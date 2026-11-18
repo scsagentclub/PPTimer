@@ -13,13 +13,13 @@ Download build outputs from [GitHub Releases](https://github.com/scsagentclub/PP
 
 ## Usage
 
-1. No installation required; simply place on your desktop and click to run. The default work countdown is 7 minutes; the break countdown is 5 minutes.
+1. No installation required; simply place on your desktop and click to run. The default countdown is 7 minutes.
 2. Use `+` / `-` or the scroll wheel to adjust by one minute. While paused, press `S` or use the context menu to enter minutes or `mm:ss` (up to 99:59).
 3. Click `R` or press `R` to reset, preserving custom seconds.
 4. The countdown starts automatically during full-screen PowerPoint presentations.
 5. Click the time to start or pause the countdown.
 6. Press `Esc` to exit, or right-click on an empty area, the time, or `R` / `T` to select "Exit".
-7. When the timer ends, the window flashes and switches between work and break modes. Auto-exit from full-screen presentations can be toggled in the context menu (off by default).
+7. When the timer ends, the window flashes, exits the current full-screen presentation by default, and stays at `00:00`. There is no break mode. Press `R` to restore the configured duration, or click the time to start another countdown. Auto-exit can be disabled in the context menu; the setting is saved, and existing saved preferences are preserved.
 8. Click `T` to choose from six themes: Dark, Light, Blue, Purple, Warm Orange, and Mint. Blue is the default, and your theme preference is saved automatically. Use the context menu to toggle always-on-top.
 
 The app targets Windows and uses Windows APIs for full-screen detection. The source entry point is `PPT-Timer.py`. Automatic detection applies to any foreground full-screen window, not just PowerPoint.

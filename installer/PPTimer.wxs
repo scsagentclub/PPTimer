@@ -10,7 +10,7 @@
 
     <StandardDirectory Id="LocalAppDataFolder">
       <Directory Id="INSTALLFOLDER" Name="PPTimer">
-        <Component Id="Application" Guid="*">
+        <Component Id="Application" Guid="9C414C22-E5F4-4A9B-A7B6-005B87EFEC74">
           <File Id="TimerExe" Source="$(var.SourceExe)" />
           <RemoveFolder Id="RemoveInstallFolder" On="uninstall" />
           <RegistryValue Root="HKCU" Key="Software\scsagentclub\PPTimer"
@@ -20,7 +20,7 @@
     </StandardDirectory>
 
     <StandardDirectory Id="ProgramMenuFolder">
-      <Directory Id="StartMenuFolder" Name="PPTimer">
+      <Directory Id="ProgramShortcutFolder" Name="PPTimer">
         <Component Id="StartMenuShortcut" Guid="*">
           <Shortcut Id="LaunchTimer" Name="PPTimer" Target="[#TimerExe]"
                     WorkingDirectory="INSTALLFOLDER" Icon="TimerIcon" />

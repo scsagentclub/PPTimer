@@ -13,24 +13,53 @@ user32 = ctypes.windll.user32
 
 # ---------- Fullscreen detection (PPT / WPS / any slideshow) ----------
 
-def any_fullscreen_excluding_self():
-    """Return True if the foreground window covers the entire screen (PPT/WPS slideshow)."""
-    hwnd = user32.GetForegroundWindow()
-    if not hwnd:
+class MonitorInfo(ctypes.Structure):
+    _fields_ = [('cbSize', wintypes.DWORD), ('rcMonitor', wintypes.RECT),
+                ('rcWork', wintypes.RECT), ('dwFlags', wintypes.DWORD)]
+
+
+# HWND/HMONITOR are pointer-sized, including in the 64-bit Windows build.
+user32.GetForegroundWindow.restype = wintypes.HWND
+user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
+user32.GetWindowRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
+user32.IsWindow.argtypes = [wintypes.HWND]
+user32.IsIconic.argtypes = [wintypes.HWND]
+user32.GetClassNameW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
+user32.MonitorFromWindow.argtypes = [wintypes.HWND, wintypes.DWORD]
+user32.MonitorFromWindow.restype = wintypes.HANDLE
+user32.GetMonitorInfoW.argtypes = [wintypes.HANDLE, ctypes.POINTER(MonitorInfo)]
+user32.SetForegroundWindow.argtypes = [wintypes.HWND]
+user32.PostMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
+
+
+def is_fullscreen_window(hwnd):
+    """Check a window against its own monitor, excluding this app and the desktop."""
+    if not hwnd or not user32.IsWindow(hwnd) or user32.IsIconic(hwnd):
         return False
-    # Skip our own process
     pid = wintypes.DWORD()
     user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
     if pid.value == os.getpid():
         return False
+    class_name = ctypes.create_unicode_buffer(256)
+    user32.GetClassNameW(hwnd, class_name, len(class_name))
+    if class_name.value in {'Progman', 'WorkerW', 'Shell_TrayWnd', 'Shell_SecondaryTrayWnd'}:
+        return False
     r = wintypes.RECT()
     if not user32.GetWindowRect(hwnd, ctypes.byref(r)):
         return False
-    w = r.right - r.left
-    h = r.bottom - r.top
-    sw = user32.GetSystemMetrics(0)
-    sh = user32.GetSystemMetrics(1)
-    return w >= sw - 4 and h >= sh - 4
+    monitor = user32.MonitorFromWindow(hwnd, 2)  # MONITOR_DEFAULTTONEAREST
+    info = MonitorInfo()
+    info.cbSize = ctypes.sizeof(info)
+    if not monitor or not user32.GetMonitorInfoW(monitor, ctypes.byref(info)):
+        return False
+    screen = info.rcMonitor
+    return (r.left <= screen.left + 4 and r.top <= screen.top + 4
+            and r.right >= screen.right - 4 and r.bottom >= screen.bottom - 4)
+
+
+def fullscreen_foreground_window():
+    hwnd = user32.GetForegroundWindow()
+    return hwnd if is_fullscreen_window(hwnd) else None
 
 
 THEMES = {
@@ -73,6 +102,8 @@ class CountdownTimer:
         self.theme = self.config.get('theme', 'blue')
         self.auto_exit_slideshow = self.config.get('auto_exit_slideshow', True)
 
+        # Keep window and monitor coordinates consistent on scaled Windows displays.
+        user32.SetProcessDPIAware()
         self.root = tk.Tk()
         self.root.configure(bg=THEMES[self.theme]['bg'])
         self.root.attributes('-topmost', True)
@@ -88,6 +119,7 @@ class CountdownTimer:
         self.flash_id = None
         self.editing_time = False
         self.ppt_was_active = True   # prevent trigger on first poll
+        self.slideshow_hwnd = None
 
         self.logo_path = self.find_logo()
 
@@ -331,11 +363,18 @@ class CountdownTimer:
     # ---------- PPT auto-detect ----------
 
     def poll_ppt(self):
-        is_active = any_fullscreen_excluding_self()
+        is_active = bool(self.track_slideshow())
         if is_active and not self.ppt_was_active and not self.running and not self.editing_time:
             self.start()
         self.ppt_was_active = is_active
         self.root.after(1000, self.poll_ppt)
+
+    def track_slideshow(self):
+        """Keep the presentation target when the timer itself takes focus."""
+        if self.slideshow_hwnd and is_fullscreen_window(self.slideshow_hwnd):
+            return self.slideshow_hwnd
+        self.slideshow_hwnd = fullscreen_foreground_window()
+        return self.slideshow_hwnd
 
     # ---------- adjust ----------
 
@@ -432,6 +471,7 @@ class CountdownTimer:
             return
         if self.remaining <= 0:
             self.remaining = self.duration_secs
+        self.track_slideshow()
         self.stop_flash()
         self.deadline = time.monotonic() + self.remaining
         self.running = True
@@ -455,10 +495,20 @@ class CountdownTimer:
             self.start()
 
     def exit_slideshow(self):
-        """Send Escape key to exit PPT/WPS slideshow."""
+        """Send Escape to the tracked slideshow, even if the timer has focus."""
+        hwnd = self.slideshow_hwnd
+        if not is_fullscreen_window(hwnd):
+            return
         VK_ESCAPE = 0x1B
-        user32.keybd_event(VK_ESCAPE, 0, 0, 0)
-        user32.keybd_event(VK_ESCAPE, 0, 2, 0)  # KEYEVENTF_KEYUP
+        if user32.GetForegroundWindow() != hwnd:
+            user32.SetForegroundWindow(hwnd)
+        if user32.GetForegroundWindow() == hwnd:
+            user32.keybd_event(VK_ESCAPE, 0, 0, 0)
+            user32.keybd_event(VK_ESCAPE, 0, 2, 0)  # KEYEVENTF_KEYUP
+        else:
+            # Windows may deny focus changes. Do not send Escape to another app.
+            user32.PostMessageW(hwnd, 0x0100, VK_ESCAPE, 0x00010001)  # WM_KEYDOWN
+            user32.PostMessageW(hwnd, 0x0101, VK_ESCAPE, 0xC0010001)  # WM_KEYUP
 
     def tick(self):
         if not self.running:
@@ -470,8 +520,9 @@ class CountdownTimer:
             self.running = False
             self.deadline = None
             self.update_display()
+            self.root.update_idletasks()  # Paint 00:00 before changing presentation focus.
             self.flash()
-            fullscreen_active = any_fullscreen_excluding_self()
+            fullscreen_active = bool(self.track_slideshow())
             # Do not restart for the same fullscreen session if Escape is ignored.
             self.ppt_was_active = fullscreen_active
             if self.auto_exit_slideshow and fullscreen_active:
@@ -479,8 +530,8 @@ class CountdownTimer:
             return
         self.remaining = math.ceil(remaining)
         self.update_display()
-        until_next_second = remaining - (self.remaining - 1)
-        self.after_id = self.root.after(max(1, math.ceil(until_next_second * 1000)), self.tick)
+        # Recheck the actual deadline through the final second, even after delayed callbacks.
+        self.after_id = self.root.after(100, self.tick)
 
     def flash(self, count=0):
         t = THEMES[self.theme]

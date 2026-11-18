@@ -2,6 +2,7 @@
 import ctypes
 import importlib.util
 import json
+import heapq
 from pathlib import Path
 import sys
 import tempfile
@@ -30,11 +31,14 @@ class CountdownTests(unittest.TestCase):
             patch.object(app.CountdownTimer, 'build_ui', lambda timer: setattr(timer, 'time_lbl', Mock())),
             patch.object(app.tk, 'Tk', return_value=self.root),
             patch.object(app.time, 'monotonic', return_value=100.0),
-            patch.object(app, 'any_fullscreen_excluding_self', return_value=True),
+            patch.object(app, 'is_fullscreen_window', return_value=True),
+            patch.object(app, 'fullscreen_foreground_window',
+                         side_effect=lambda: 42 if self.fullscreen.return_value else None),
         ]
         mocks = [self.enterContext(p) for p in patches]
-        self.clock, self.fullscreen = mocks[-2:]
-        app.user32.reset_mock()
+        self.clock, self.fullscreen, self.foreground = mocks[-3:]
+        app.user32.reset_mock(return_value=True, side_effect=True)
+        app.user32.GetForegroundWindow.return_value = 42
         self.timer = app.CountdownTimer()
 
     def finish(self):
@@ -135,6 +139,100 @@ class CountdownTests(unittest.TestCase):
         self.timer.apply_theme('mint')
         self.assertEqual(self.timer.remaining, 0)
         self.timer.time_lbl.config.assert_any_call(fg=app.THEMES['mint']['timer_fg'])
+
+    def test_scheduled_callbacks_pass_last_second_and_finish(self):
+        queue = []
+        sequence = 0
+
+        def schedule(delay, callback):
+            nonlocal sequence
+            sequence += 1
+            heapq.heappush(queue, (self.clock.return_value + delay / 1000, sequence, callback))
+            return sequence
+
+        self.root.after.side_effect = schedule
+        self.timer.set_preset(2)
+        self.timer.start()
+        while queue and queue[0][0] <= 103.0:
+            instant, _, callback = heapq.heappop(queue)
+            self.clock.return_value = instant
+            callback()
+        self.timer.time_lbl.config.assert_any_call(text='00:01')
+        self.timer.time_lbl.config.assert_any_call(text='00:00')
+        self.assertEqual(self.timer.remaining, 0)
+        self.assertFalse(self.timer.running)
+        self.assertEqual(app.user32.keybd_event.call_count, 2)
+
+    def test_timer_focus_does_not_lose_presentation_target(self):
+        self.timer.start()
+        self.foreground.return_value = None
+        self.foreground.side_effect = None
+        app.user32.GetForegroundWindow.side_effect = [99, 42]
+        self.clock.return_value = self.timer.deadline
+        self.timer.tick()
+        app.user32.SetForegroundWindow.assert_called_once_with(42)
+        self.assertEqual(app.user32.keybd_event.call_count, 2)
+        self.assertEqual(self.timer.remaining, 0)
+
+    def test_denied_focus_targets_presentation_without_global_escape(self):
+        app.user32.GetForegroundWindow.return_value = 99
+        self.finish()
+        app.user32.keybd_event.assert_not_called()
+        app.user32.PostMessageW.assert_any_call(42, 0x0100, 0x1B, 0x00010001)
+        app.user32.PostMessageW.assert_any_call(42, 0x0101, 0x1B, 0xC0010001)
+
+    def test_closed_presentation_is_not_sent_escape(self):
+        self.timer.start()
+        self.fullscreen.return_value = False
+        self.clock.return_value = self.timer.deadline
+        self.timer.tick()
+        self.assertEqual(self.timer.remaining, 0)
+        app.user32.keybd_event.assert_not_called()
+        app.user32.PostMessageW.assert_not_called()
+
+
+class FullscreenDetectionTests(unittest.TestCase):
+    def setUp(self):
+        self.api = self.enterContext(patch.object(app, 'user32', Mock()))
+        self.api.IsWindow.return_value = True
+        self.api.IsIconic.return_value = False
+        self.api.MonitorFromWindow.return_value = 7
+        self.window_rect = (1920, -200, 3200, 824)
+        self.monitor_rect = (1920, -200, 3200, 824)
+
+        def window_rect(hwnd, ptr):
+            ptr._obj.left, ptr._obj.top, ptr._obj.right, ptr._obj.bottom = self.window_rect
+            return True
+
+        def monitor_info(monitor, ptr):
+            rect = ptr._obj.rcMonitor
+            rect.left, rect.top, rect.right, rect.bottom = self.monitor_rect
+            return True
+
+        self.api.GetWindowRect.side_effect = window_rect
+        self.api.GetMonitorInfoW.side_effect = monitor_info
+
+    def test_fullscreen_on_secondary_monitor_with_different_resolution(self):
+        self.assertTrue(app.is_fullscreen_window(42))
+
+    def test_window_not_covering_its_monitor_is_not_fullscreen(self):
+        self.window_rect = (1920, -200, 3200, 784)
+        self.assertFalse(app.is_fullscreen_window(42))
+
+    def test_minimized_or_closed_window_is_not_fullscreen(self):
+        self.api.IsIconic.return_value = True
+        self.assertFalse(app.is_fullscreen_window(42))
+        self.api.IsIconic.return_value = False
+        self.api.IsWindow.return_value = False
+        self.assertFalse(app.is_fullscreen_window(42))
+
+    def test_desktop_is_not_a_presentation(self):
+        def class_name(hwnd, buffer, length):
+            buffer.value = 'WorkerW'
+            return len(buffer.value)
+
+        self.api.GetClassNameW.side_effect = class_name
+        self.assertFalse(app.is_fullscreen_window(42))
 
 
 if __name__ == '__main__':

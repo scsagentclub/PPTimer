@@ -22,7 +22,7 @@ Download build outputs from [GitHub Releases](https://github.com/scsagentclub/PP
 7. When the timer ends, the window flashes, exits the current full-screen presentation by default, and stays at `00:00`. There is no break mode. Press `R` to restore the configured duration, or click the time to start another countdown. Auto-exit can be disabled in the context menu; the setting is saved, and existing saved preferences are preserved.
 8. Click `T` to choose from six themes: Dark, Light, Blue, Purple, Warm Orange, and Mint. Blue is the default, and your theme preference is saved automatically. Use the context menu to toggle always-on-top.
 
-The app targets Windows and uses Windows APIs for full-screen detection. The source entry point is `PPT-Timer.py`. Automatic detection applies to any foreground full-screen window, not just PowerPoint.
+The app targets Windows and uses Windows APIs for full-screen detection. The source entry point is `PPT-Timer.py`. Full-screen detection uses the presentation window's own monitor and is not limited to PowerPoint. The timer tracks the presentation window so it can exit that presentation when time expires even after you click the timer.
 
 ## Build
 

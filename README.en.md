@@ -9,7 +9,7 @@ A free-for-life PowerPoint countdown timer.
 Download build outputs from [GitHub Releases](https://github.com/scsagentclub/PPTimer/releases):
 
 - `PPTimer.zip`: portable edition. Extract the ZIP and run `PPTimer.exe`.
-- `PPTimer-1.2.1-win64.msi`: Windows 64-bit installer. Installs for the current user, creates a Start menu shortcut, and supports uninstalling from Windows Settings.
+- `PPTimer-1.2.2-win64.msi`: Windows 64-bit installer. Installs for the current user, creates a Start menu shortcut, and supports uninstalling from Windows Settings.
 
 ## Usage
 
@@ -40,20 +40,20 @@ dotnet tool install --global wix --version 5.0.2
 ./installer/build-msi.ps1
 ```
 
-The installer version is read from `VERSION`. The output is `dist/PPTimer-1.2.1-win64.msi`.
+The installer version is read from `VERSION`. The output is `dist/PPTimer-1.2.2-win64.msi`.
 
 ## GitHub Actions automated builds
 
-Push a `v*` tag matching `VERSION` to trigger an automated build. For example, when `VERSION` is `1.2.1`:
+Push a `v*` tag matching `VERSION` to trigger an automated build. For example, when `VERSION` is `1.2.2`:
 
 ```bash
-git tag v1.2.1
-git push origin v1.2.1
+git tag v1.2.2
+git push origin v1.2.2
 ```
 
 The workflow builds the ZIP and MSI, verifies MSI installation and uninstallation, and uploads both outputs to the corresponding GitHub Release. You can also run the workflow manually from the Actions page and download its build artifacts.
 
-To add an MSI to the existing v1.2.1 release, select **Build Windows ZIP and MSI** in Actions, click **Run workflow**, select the `main` branch, and set `release_tag` to `v1.2.1`. The workflow downloads the existing release ZIP, packages its EXE as an MSI, and attaches the installer to that release.
+To add an MSI to the existing v1.2.2 release, select **Build Windows ZIP and MSI** in Actions, click **Run workflow**, select the `main` branch, and set `release_tag` to `v1.2.2`. The workflow downloads the existing release ZIP, packages its EXE as an MSI, and attaches the installer to that release.
 
 ## Credits
 

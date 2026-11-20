@@ -9,7 +9,7 @@
 在 [GitHub Releases](https://github.com/scsagentclub/PPTimer/releases) 下载构建产物：
 
 - `PPTimer.zip`：免安装版，解压后运行 `PPTimer.exe`。
-- `PPTimer-1.2.1-win64.msi`：Windows 64 位安装版，安装到当前用户目录并创建开始菜单快捷方式，可在 Windows 设置中卸载。
+- `PPTimer-1.2.2-win64.msi`：Windows 64 位安装版，安装到当前用户目录并创建开始菜单快捷方式，可在 Windows 设置中卸载。
 
 ## 使用说明
 
@@ -40,20 +40,20 @@ dotnet tool install --global wix --version 5.0.2
 ./installer/build-msi.ps1
 ```
 
-安装包版本读取自 `VERSION`，产物为 `dist/PPTimer-1.2.1-win64.msi`。
+安装包版本读取自 `VERSION`，产物为 `dist/PPTimer-1.2.2-win64.msi`。
 
 ## GitHub Actions 自动构建
 
-推送与 `VERSION` 一致的 `v*` tag 即可触发自动构建。例如 `VERSION` 为 `1.2.1` 时：
+推送与 `VERSION` 一致的 `v*` tag 即可触发自动构建。例如 `VERSION` 为 `1.2.2` 时：
 
 ```bash
-git tag v1.2.1
-git push origin v1.2.1
+git tag v1.2.2
+git push origin v1.2.2
 ```
 
 工作流会生成 ZIP 和 MSI，验证 MSI 安装及卸载后，将两种产物上传到对应版本的 GitHub Release。也可在 Actions 页面手动运行工作流，下载构建产物。
 
-给已有的 v1.2.1 补建 MSI：在 Actions 中选择 **Build Windows ZIP and MSI**，点击 **Run workflow**，选择 `main` 分支并填写 `release_tag` 为 `v1.2.1`。工作流会下载已有 Release 的 ZIP，用其中的 EXE 生成 MSI，并将安装包添加到该 Release。
+给已有的 v1.2.2 补建 MSI：在 Actions 中选择 **Build Windows ZIP and MSI**，点击 **Run workflow**，选择 `main` 分支并填写 `release_tag` 为 `v1.2.2`。工作流会下载已有 Release 的 ZIP，用其中的 EXE 生成 MSI，并将安装包添加到该 Release。
 
 ## 致谢
 

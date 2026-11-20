@@ -120,6 +120,8 @@ class CountdownTimer:
         self.editing_time = False
         self.ppt_was_active = True   # prevent trigger on first poll
         self.slideshow_hwnd = None
+        self.exit_retry_id = None
+        self.exit_retry_count = 0
 
         self.logo_path = self.find_logo()
 
@@ -469,6 +471,7 @@ class CountdownTimer:
     def start(self):
         if self.running or self.editing_time:
             return
+        self.cancel_exit_retry()
         if self.remaining <= 0:
             self.remaining = self.duration_secs
         self.track_slideshow()
@@ -494,21 +497,53 @@ class CountdownTimer:
         else:
             self.start()
 
+    EXIT_RETRY_DELAY_MS = 600
+    MAX_EXIT_ATTEMPTS = 3   # first Escape plus retries, e.g. one consumed by stopping a video
+
     def exit_slideshow(self):
-        """Send Escape to the tracked slideshow, even if the timer has focus."""
-        hwnd = self.slideshow_hwnd
-        if not is_fullscreen_window(hwnd):
-            return
+        """Send Escape to the window that currently owns the fullscreen show.
+
+        Playing a fullscreen video can hand the show to a different window
+        (media overlay), so prefer the live foreground window and fall back
+        to the tracked slideshow handle.
+        """
+        target = fullscreen_foreground_window() or self.slideshow_hwnd
+        if not is_fullscreen_window(target):
+            return None
         VK_ESCAPE = 0x1B
-        if user32.GetForegroundWindow() != hwnd:
-            user32.SetForegroundWindow(hwnd)
-        if user32.GetForegroundWindow() == hwnd:
+        if user32.GetForegroundWindow() != target:
+            user32.SetForegroundWindow(target)
+        if user32.GetForegroundWindow() == target:
             user32.keybd_event(VK_ESCAPE, 0, 0, 0)
             user32.keybd_event(VK_ESCAPE, 0, 2, 0)  # KEYEVENTF_KEYUP
         else:
             # Windows may deny focus changes. Do not send Escape to another app.
-            user32.PostMessageW(hwnd, 0x0100, VK_ESCAPE, 0x00010001)  # WM_KEYDOWN
-            user32.PostMessageW(hwnd, 0x0101, VK_ESCAPE, 0xC0010001)  # WM_KEYUP
+            user32.PostMessageW(target, 0x0100, VK_ESCAPE, 0x00010001)  # WM_KEYDOWN
+            user32.PostMessageW(target, 0x0101, VK_ESCAPE, 0xC0010001)  # WM_KEYUP
+        return target
+
+    def schedule_exit_retry(self, attempts):
+        self.exit_retry_count = attempts
+        self.exit_retry_id = self.root.after(self.EXIT_RETRY_DELAY_MS, self.retry_exit_slideshow)
+
+    def retry_exit_slideshow(self):
+        """Re-check after the first Escape: video playback and animations can
+        consume it without closing the show, so keep trying briefly."""
+        self.exit_retry_id = None
+        if (self.exit_retry_count >= self.MAX_EXIT_ATTEMPTS
+                or not self.auto_exit_slideshow or self.running
+                or self.editing_time or self.remaining != 0):
+            return
+        target = fullscreen_foreground_window() or self.slideshow_hwnd
+        if not is_fullscreen_window(target):
+            return  # Slideshow already closed.
+        self.exit_slideshow()
+        self.schedule_exit_retry(self.exit_retry_count + 1)
+
+    def cancel_exit_retry(self):
+        if self.exit_retry_id is not None:
+            self.root.after_cancel(self.exit_retry_id)
+            self.exit_retry_id = None
 
     def tick(self):
         if not self.running:
@@ -527,6 +562,7 @@ class CountdownTimer:
             self.ppt_was_active = fullscreen_active
             if self.auto_exit_slideshow and fullscreen_active:
                 self.exit_slideshow()
+                self.schedule_exit_retry(1)
             return
         self.remaining = math.ceil(remaining)
         self.update_display()
@@ -551,6 +587,7 @@ class CountdownTimer:
     def reset(self):
         self.running = False
         self.deadline = None
+        self.cancel_exit_retry()
         if self.after_id is not None:
             self.root.after_cancel(self.after_id)
             self.after_id = None

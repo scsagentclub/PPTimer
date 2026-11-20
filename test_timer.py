@@ -46,6 +46,16 @@ class CountdownTests(unittest.TestCase):
         self.clock.return_value = self.timer.deadline
         self.timer.tick()
 
+    def fire_retries(self):
+        """Invoke every scheduled exit-retry callback, including ones queued by retries."""
+        fired = 0
+        while True:
+            calls = [c for c in self.root.after.call_args_list if c.args and c.args[0] == 600]
+            if fired >= len(calls):
+                return
+            calls[fired].args[1]()
+            fired += 1
+
     def test_default_countdown_exits_fullscreen_once_and_stays_at_zero(self):
         self.assertEqual(self.timer.remaining, 420)
         self.finish()
@@ -153,7 +163,7 @@ class CountdownTests(unittest.TestCase):
         self.root.after.side_effect = schedule
         self.timer.set_preset(2)
         self.timer.start()
-        while queue and queue[0][0] <= 103.0:
+        while queue and queue[0][0] <= 102.2:
             instant, _, callback = heapq.heappop(queue)
             self.clock.return_value = instant
             callback()
@@ -189,6 +199,38 @@ class CountdownTests(unittest.TestCase):
         self.assertEqual(self.timer.remaining, 0)
         app.user32.keybd_event.assert_not_called()
         app.user32.PostMessageW.assert_not_called()
+
+    def test_expiry_targets_the_current_foreground_fullscreen_window(self):
+        # Fullscreen video hands the show to a different window (media overlay).
+        self.timer.start()
+        self.foreground.side_effect = lambda: 99
+        app.user32.GetForegroundWindow.return_value = 7  # focus stays elsewhere
+        self.clock.return_value = self.timer.deadline
+        self.timer.tick()
+        app.user32.SetForegroundWindow.assert_called_once_with(99)
+        app.user32.PostMessageW.assert_any_call(99, 0x0100, 0x1B, 0x00010001)
+        app.user32.PostMessageW.assert_any_call(99, 0x0101, 0x1B, 0xC0010001)
+
+    def test_exit_retries_while_slideshow_stays_fullscreen(self):
+        self.finish()  # first Escape, consumed by stopping video/animation
+        self.assertEqual(app.user32.keybd_event.call_count, 2)
+        self.fire_retries()
+        self.assertEqual(app.user32.keybd_event.call_count, 6)  # three attempts total
+
+    def test_exit_retry_stops_once_slideshow_closes(self):
+        self.finish()
+        self.assertEqual(app.user32.keybd_event.call_count, 2)
+        self.fullscreen.return_value = False
+        self.fire_retries()
+        self.assertEqual(app.user32.keybd_event.call_count, 2)
+
+    def test_restart_cancels_pending_exit_retry(self):
+        self.finish()
+        self.assertIsNotNone(self.timer.exit_retry_id)
+        self.timer.reset()
+        self.assertIsNone(self.timer.exit_retry_id)
+        self.fire_retries()
+        self.assertEqual(app.user32.keybd_event.call_count, 2)
 
 
 class FullscreenDetectionTests(unittest.TestCase):
